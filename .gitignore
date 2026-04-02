@@ -10,4 +10,6 @@ token.json
 *.log
 
 # Environment variables (if you use a .env file later)
-.env* 
+.env* gmail_token.json
+gmail_token_leefuhr.json
+gmail_token_leefur.json

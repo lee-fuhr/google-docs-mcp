@@ -1,5 +1,4 @@
 // src/auth.ts
-import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -25,7 +24,7 @@ async function loadSavedCredentialsIfExist(): Promise<OAuth2Client | null> {
     const content = await fs.readFile(TOKEN_PATH);
     const credentials = JSON.parse(content.toString());
     const { client_secret, client_id, redirect_uris } = await loadClientSecrets();
-    const client = new google.auth.OAuth2(client_id, client_secret, redirect_uris?.[0]);
+    const client = new OAuth2Client(client_id, client_secret, redirect_uris?.[0]);
     client.setCredentials(credentials);
     return client;
   } catch (err) {
@@ -64,7 +63,7 @@ async function authenticate(): Promise<OAuth2Client> {
   const redirectUri = client_type === 'web' ? redirect_uris[0] : 'urn:ietf:wg:oauth:2.0:oob';
   console.error(`DEBUG: Using redirect URI: ${redirectUri}`);
   console.error(`DEBUG: Client type: ${client_type}`);
-  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+  const oAuth2Client = new OAuth2Client(client_id, client_secret, redirectUri);
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 

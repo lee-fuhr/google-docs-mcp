@@ -1,7 +1,8 @@
 // src/server.ts
 import { FastMCP, UserError } from 'fastmcp';
 import { z } from 'zod';
-import { google, docs_v1, drive_v3 } from 'googleapis';
+import { docs, type docs_v1 } from '@googleapis/docs';
+import { drive, type drive_v3 } from '@googleapis/drive';
 import { authorize } from './auth.js';
 import { OAuth2Client } from 'google-auth-library';
 
@@ -33,8 +34,8 @@ try {
 console.error("Attempting to authorize Google API client...");
 const client = await authorize();
 authClient = client; // Assign client here
-googleDocs = google.docs({ version: 'v1', auth: authClient });
-googleDrive = google.drive({ version: 'v3', auth: authClient });
+googleDocs = docs({ version: 'v1', auth: authClient as any });
+googleDrive = drive({ version: 'v3', auth: authClient as any });
 console.error("Google API client authorized successfully.");
 } catch (error) {
 console.error("FATAL: Failed to initialize Google API client:", error);
@@ -47,10 +48,10 @@ throw new Error("Google client initialization failed. Cannot start server tools.
 }
 // Ensure googleDocs and googleDrive are set if authClient is valid
 if (authClient && !googleDocs) {
-googleDocs = google.docs({ version: 'v1', auth: authClient });
+googleDocs = docs({ version: 'v1', auth: authClient as any });
 }
 if (authClient && !googleDrive) {
-googleDrive = google.drive({ version: 'v3', auth: authClient });
+googleDrive = drive({ version: 'v3', auth: authClient as any });
 }
 
 if (!googleDocs || !googleDrive) {
@@ -79,20 +80,20 @@ const server = new FastMCP({
 
 // --- Helper to get Docs client within tools ---
 async function getDocsClient() {
-const { googleDocs: docs } = await initializeGoogleClient();
-if (!docs) {
+const { googleDocs: docsClient } = await initializeGoogleClient();
+if (!docsClient) {
 throw new UserError("Google Docs client is not initialized. Authentication might have failed during startup or lost connection.");
 }
-return docs;
+return docsClient;
 }
 
 // --- Helper to get Drive client within tools ---
 async function getDriveClient() {
-const { googleDrive: drive } = await initializeGoogleClient();
-if (!drive) {
+const { googleDrive: driveClient } = await initializeGoogleClient();
+if (!driveClient) {
 throw new UserError("Google Drive client is not initialized. Authentication might have failed during startup or lost connection.");
 }
-return drive;
+return driveClient;
 }
 
 // === HELPER FUNCTIONS ===
@@ -1043,8 +1044,7 @@ server.addTool({
       const doc = await docsClient.documents.get({ documentId: args.documentId });
 
       // Use Drive API v3 with proper fields to get quoted content
-      const drive = google.drive({ version: 'v3', auth: authClient! });
-      const response = await drive.comments.list({
+      const response = await driveClient.comments.list({
         fileId: args.documentId,
         fields: 'comments(id,content,quotedFileContent,author,createdTime,resolved)',
         pageSize: 100
@@ -1097,8 +1097,8 @@ server.addTool({
     log.info(`Getting comment ${args.commentId} from document ${args.documentId}`);
 
     try {
-      const drive = google.drive({ version: 'v3', auth: authClient! });
-      const response = await drive.comments.get({
+      const driveClient = await getDriveClient();
+      const response = await driveClient.comments.get({
         fileId: args.documentId,
         commentId: args.commentId,
         fields: 'id,content,quotedFileContent,author,createdTime,resolved,replies(id,content,author,createdTime)'
@@ -1176,9 +1176,9 @@ server.addTool({
       }
 
       // Use Drive API v3 for comments
-      const drive = google.drive({ version: 'v3', auth: authClient! });
+      const driveClient = await getDriveClient();
 
-      const response = await drive.comments.create({
+      const response = await driveClient.comments.create({
         fileId: args.documentId,
         fields: 'id,content,quotedFileContent,author,createdTime,resolved',
         requestBody: {
@@ -1220,9 +1220,9 @@ server.addTool({
     log.info(`Adding reply to comment ${args.commentId} in doc ${args.documentId}`);
 
     try {
-      const drive = google.drive({ version: 'v3', auth: authClient! });
+      const driveClient = await getDriveClient();
 
-      const response = await drive.replies.create({
+      const response = await driveClient.replies.create({
         fileId: args.documentId,
         commentId: args.commentId,
         fields: 'id,content,author,createdTime',
@@ -1250,9 +1250,9 @@ server.addTool({
     log.info(`Resolving comment ${args.commentId} in doc ${args.documentId}`);
 
     try {
-      const drive = google.drive({ version: 'v3', auth: authClient! });
+      const driveClient = await getDriveClient();
 
-      await drive.comments.update({
+      await driveClient.comments.update({
         fileId: args.documentId,
         commentId: args.commentId,
         requestBody: {
@@ -1279,9 +1279,9 @@ server.addTool({
     log.info(`Deleting comment ${args.commentId} from doc ${args.documentId}`);
 
     try {
-      const drive = google.drive({ version: 'v3', auth: authClient! });
+      const driveClient = await getDriveClient();
 
-      await drive.comments.delete({
+      await driveClient.comments.delete({
         fileId: args.documentId,
         commentId: args.commentId
       });
@@ -2108,17 +2108,19 @@ try {
 // --- Server Startup ---
 async function startServer() {
 try {
-await initializeGoogleClient(); // Authorize BEFORE starting listeners
+// Lazy init: Google client initializes on first tool call, not at startup
 console.error("Starting Ultimate Google Docs MCP server...");
 
-      // Using stdio as before
       const configToUse = {
-          transportType: "stdio" as const,
+          transportType: "httpStream" as const,
+          httpStream: {
+              port: 3100,
+          },
       };
 
       // Start the server with proper error handling
       server.start(configToUse);
-      console.error(`MCP Server running using ${configToUse.transportType}. Awaiting client connection...`);
+      console.error(`MCP Server running on http://localhost:${configToUse.httpStream.port}/mcp`);
 
       // Log that error handling has been enabled
       console.error('Process-level error handling configured to prevent crashes from timeout errors.');

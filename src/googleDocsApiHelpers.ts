@@ -1,5 +1,5 @@
 // src/googleDocsApiHelpers.ts
-import { google, docs_v1 } from 'googleapis';
+import { type docs_v1 } from '@googleapis/docs';
 import { OAuth2Client } from 'google-auth-library';
 import { UserError } from 'fastmcp';
 import { TextStyleArgs, ParagraphStyleArgs, hexToRgbColor, NotImplementedError } from './types.js';
